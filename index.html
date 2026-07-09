@@ -13,12 +13,17 @@
   <div id="root"></div>
 
   <script type="text/babel-source" id="app-source">
-    const { useMemo, useState } = React;
+    const { useEffect, useMemo, useState } = React;
 
     const initialPrinters = [
-      { name: "Prusa", setupFee: 15, timeCost: 10 },
-      { name: "Form 3", setupFee: 15, timeCost: 3 },
-      { name: "Fuse", setupFee: 20, timeCost: 3 },
+      { name: "Prusa", setupFee: 15, timeCost: 10, materials: ["PLA", "PETG", "TPU", "PVA"] },
+      {
+        name: "Form 4",
+        setupFee: 15,
+        timeCost: 3,
+        materials: ["BioMed White", "Clear", "Elastic 50A", "Flexible 80A", "Tough 2000", "Silicone 40A", "BioMed Durable"],
+      },
+      { name: "Fuse", setupFee: 20, timeCost: 3, materials: ["Nylon"] },
     ];
 
     const initialMaterials = [
@@ -45,11 +50,11 @@
     }
 
     function App() {
-      const [printers] = useState(initialPrinters);
+      const [printers, setPrinters] = useState(initialPrinters);
       const [materials, setMaterials] = useState(initialMaterials);
 
       const [printerName, setPrinterName] = useState(initialPrinters[0].name);
-      const [materialName, setMaterialName] = useState(initialMaterials[0].name);
+      const [materialName, setMaterialName] = useState(initialPrinters[0].materials[0]);
       const [printTime, setPrintTime] = useState(0);
       const [materialAmount, setMaterialAmount] = useState(0);
       const [includeSetup, setIncludeSetup] = useState(true);
@@ -59,7 +64,17 @@
       const [newMaterialCost, setNewMaterialCost] = useState("");
 
       const selectedPrinter = printers.find((p) => p.name === printerName) ?? printers[0];
-      const selectedMaterial = materials.find((m) => m.name === materialName) ?? materials[0];
+      const availableMaterials = useMemo(
+        () => materials.filter((m) => selectedPrinter.materials.includes(m.name)),
+        [materials, selectedPrinter]
+      );
+      const selectedMaterial = availableMaterials.find((m) => m.name === materialName) ?? availableMaterials[0];
+
+      useEffect(() => {
+        if (!selectedPrinter.materials.includes(materialName)) {
+          setMaterialName(selectedPrinter.materials[0]);
+        }
+      }, [selectedPrinter, materialName]);
 
       const total = useMemo(() => {
         const timeComponent = includeTimeCost ? Number(printTime || 0) * selectedPrinter.timeCost : 0;
@@ -81,6 +96,9 @@
         if (!name || !Number.isFinite(cost) || cost < 0) return;
 
         setMaterials((prev) => [...prev, { name, cost }]);
+        setPrinters((prev) =>
+          prev.map((p) => (p.name === printerName ? { ...p, materials: [...p.materials, name] } : p))
+        );
         setMaterialName(name);
         setNewMaterialName("");
         setNewMaterialCost("");
@@ -187,7 +205,9 @@
                   <div className="flex items-end justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-semibold">3. Material</h2>
-                      <p className="mt-1 text-sm text-slate-600">Select a material or add a new one with your own cost.</p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        Materials available for {selectedPrinter.name}. Add a new one with your own cost.
+                      </p>
                     </div>
                     <div className="text-right text-xs text-slate-500">Cost is per unit</div>
                   </div>
@@ -200,7 +220,7 @@
                         onChange={(e) => setMaterialName(e.target.value)}
                         className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
                       >
-                        {materials.map((material) => (
+                        {availableMaterials.map((material) => (
                           <option key={material.name} value={material.name}>
                             {material.name} ({money(material.cost)})
                           </option>
@@ -242,7 +262,7 @@
                       </button>
                     </div>
                     <p className="mt-3 text-xs text-slate-500">
-                      The new material is added to the dropdown immediately.
+                      The new material is added to the dropdown for {selectedPrinter.name} immediately.
                     </p>
                   </div>
                 </section>
@@ -287,6 +307,7 @@
 
                 <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <h2 className="text-lg font-semibold">Material list</h2>
+                  <p className="mt-1 text-sm text-slate-600">Compatible with {selectedPrinter.name}.</p>
                   <div className="mt-4 max-h-80 overflow-auto rounded-2xl border border-slate-200">
                     <table className="w-full text-left text-sm">
                       <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -296,7 +317,7 @@
                         </tr>
                       </thead>
                       <tbody>
-                        {materials.map((m) => (
+                        {availableMaterials.map((m) => (
                           <tr key={m.name} className="border-t border-slate-100">
                             <td className="px-4 py-3">{m.name}</td>
                             <td className="px-4 py-3 font-medium">{money(m.cost)}</td>
