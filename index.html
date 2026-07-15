@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>3D Print Cost Calculator</title>
+  <title>CMI 3D Print Cost Calculator</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -53,21 +53,18 @@
     }
 
     function App() {
-      const [printers, setPrinters] = useState(initialPrinters);
-      const [materials, setMaterials] = useState(initialMaterials);
+      const [printers] = useState(initialPrinters);
+      const [materials] = useState(initialMaterials);
 
       const [printerName, setPrinterName] = useState(initialPrinters[0].name);
       const [materialName, setMaterialName] = useState(initialPrinters[0].materials[0]);
       const [printTime, setPrintTime] = useState(0);
       const [materialAmount, setMaterialAmount] = useState(0);
-      const [includeSetup, setIncludeSetup] = useState(true);
-      const [includeTimeCost, setIncludeTimeCost] = useState(true);
-
-      const [newMaterialName, setNewMaterialName] = useState("");
-      const [newMaterialCost, setNewMaterialCost] = useState("");
+      const [b2bPricing, setB2bPricing] = useState(false);
 
       const [recipientName, setRecipientName] = useState("");
       const [recipientDepartment, setRecipientDepartment] = useState("");
+      const [b2bTeamNumber, setB2bTeamNumber] = useState("");
       const [partName, setPartName] = useState("");
       const [numberOfPrints, setNumberOfPrints] = useState(1);
 
@@ -84,38 +81,21 @@
         }
       }, [selectedPrinter, materialName]);
 
-      const total = useMemo(() => {
-        const timeComponent = includeTimeCost ? Number(printTime || 0) * selectedPrinter.timeCost : 0;
-        const setupComponent = includeSetup ? selectedPrinter.setupFee : 0;
-        const materialComponent = Number(materialAmount || 0) * selectedMaterial.cost;
-        return timeComponent + setupComponent + materialComponent;
-      }, [includeSetup, includeTimeCost, printTime, materialAmount, selectedPrinter, selectedMaterial]);
-
       const breakdown = useMemo(() => {
-        const timeComponent = includeTimeCost ? Number(printTime || 0) * selectedPrinter.timeCost : 0;
-        const setupComponent = includeSetup ? selectedPrinter.setupFee : 0;
+        const timeComponent = Number(printTime || 0) * selectedPrinter.timeCost * (b2bPricing ? 0.5 : 1);
+        const setupComponent = b2bPricing ? 0 : selectedPrinter.setupFee;
         const materialComponent = Number(materialAmount || 0) * selectedMaterial.cost;
         return { timeComponent, setupComponent, materialComponent };
-      }, [includeSetup, includeTimeCost, printTime, materialAmount, selectedPrinter, selectedMaterial]);
+      }, [b2bPricing, printTime, materialAmount, selectedPrinter, selectedMaterial]);
 
-      function addMaterial() {
-        const name = newMaterialName.trim();
-        const cost = Number(newMaterialCost);
-        if (!name || !Number.isFinite(cost) || cost < 0) return;
-
-        setMaterials((prev) => [...prev, { name, cost }]);
-        setPrinters((prev) =>
-          prev.map((p) => (p.name === printerName ? { ...p, materials: [...p.materials, name] } : p))
-        );
-        setMaterialName(name);
-        setNewMaterialName("");
-        setNewMaterialCost("");
-      }
+      const total = breakdown.timeComponent + breakdown.setupComponent + breakdown.materialComponent;
 
       const quantity = Math.max(1, Math.round(Number(numberOfPrints || 1)));
       const quoteTotal = breakdown.setupComponent + (breakdown.timeComponent + breakdown.materialComponent) * quantity;
 
-      const quoteReady = recipientName.trim() && recipientDepartment.trim() && partName.trim();
+      const quoteReady = b2bPricing
+        ? b2bTeamNumber.trim() && partName.trim()
+        : recipientName.trim() && recipientDepartment.trim() && partName.trim();
 
       function generateQuotePdf() {
         if (!quoteReady) return;
@@ -133,7 +113,7 @@
 
         doc.setFont("helvetica", "bold");
         doc.setFontSize(20);
-        doc.text("3D Print Quote", margin, y);
+        doc.text(b2bPricing ? "Bench to Bedside - Internal Print Invoice" : "3D Print Quote", margin, y);
         y += 8;
 
         doc.setFont("helvetica", "normal");
@@ -152,8 +132,12 @@
           y += 8;
         };
 
-        addRow("Recipient:", recipientName.trim());
-        addRow("Department:", recipientDepartment.trim());
+        if (b2bPricing) {
+          addRow("B2B Team Number:", b2bTeamNumber.trim());
+        } else {
+          addRow("Recipient:", recipientName.trim());
+          addRow("Department:", recipientDepartment.trim());
+        }
         addRow("Part:", partName.trim());
         addRow("Quantity:", quantity);
         addRow("Printer:", selectedPrinter.name);
@@ -166,26 +150,23 @@
 
         doc.setFont("helvetica", "bold");
         doc.setFontSize(13);
-        doc.text("Total Quoted Price", margin, y);
+        doc.text(b2bPricing ? "Total Internal Cost" : "Total Quoted Price", margin, y);
         doc.setFontSize(24);
         doc.text(money(quoteTotal), pageWidth - margin, y, { align: "right" });
 
         const safePart = partName.trim().replace(/[^a-z0-9]+/gi, "_");
-        doc.save(`Quote_${safePart}.pdf`);
+        doc.save(`${b2bPricing ? "Invoice" : "Quote"}_${safePart}.pdf`);
       }
 
       return (
         <div className="min-h-screen bg-slate-50 text-slate-900">
           <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
             <div className="mb-8 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-              <h1 className="text-3xl font-semibold tracking-tight">3D Print Cost Calculator</h1>
+              <img src={LOGO_DATA_URI} alt="Center for Medical Innovation" className="h-10 w-auto" />
+              <h1 className="mt-4 text-3xl font-semibold tracking-tight">CMI 3D Print Cost Calculator</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                Select a printer, choose a material, enter print time and material amount, and the calculator will estimate
-                the total using:
+                Select a printer, choose a material, and enter print time and material amount to estimate the cost.
               </p>
-              <div className="mt-4 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-slate-100">
-                Total = (Print Time × Time Cost) + Setup Fee + (Material Amount × Material Cost)
-              </div>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
@@ -249,122 +230,98 @@
                     </label>
                   </div>
 
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={includeTimeCost}
-                        onChange={(e) => setIncludeTimeCost(e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300"
-                      />
-                      <span className="text-sm">Include print time cost</span>
-                    </label>
-                    <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={includeSetup}
-                        onChange={(e) => setIncludeSetup(e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300"
-                      />
-                      <span className="text-sm">Include setup fee</span>
-                    </label>
-                  </div>
-                </section>
-
-                <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-                  <div className="flex items-end justify-between gap-4">
+                  <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3">
                     <div>
-                      <h2 className="text-lg font-semibold">3. Material</h2>
-                      <p className="mt-1 text-sm text-slate-600">
-                        Materials available for {selectedPrinter.name}. Add a new one with your own cost.
-                      </p>
+                      <span className="text-sm font-medium text-slate-900">B2B pricing</span>
+                      <p className="text-xs text-slate-500">Waives the setup fee and halves the print time cost for internal teams.</p>
                     </div>
-                    <div className="text-right text-xs text-slate-500">Cost is per unit</div>
-                  </div>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">Material</span>
-                      <select
-                        value={materialName}
-                        onChange={(e) => setMaterialName(e.target.value)}
-                        className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
-                      >
-                        {availableMaterials.map((material) => (
-                          <option key={material.name} value={material.name}>
-                            {material.name} ({money(material.cost)})
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                      <div className="font-medium text-slate-900">Selected material rate</div>
-                      <div className="mt-1">{selectedMaterial.name}</div>
-                      <div>{money(selectedMaterial.cost)} per unit</div>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 rounded-2xl border border-slate-200 p-4">
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Add a custom material</h3>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-[1.4fr_0.8fr_auto]">
-                      <input
-                        type="text"
-                        placeholder="Material name"
-                        value={newMaterialName}
-                        onChange={(e) => setNewMaterialName(e.target.value)}
-                        className="rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={b2bPricing}
+                      onClick={() => setB2bPricing((v) => !v)}
+                      className={[
+                        "relative h-7 w-12 shrink-0 rounded-full transition-colors",
+                        b2bPricing ? "bg-emerald-500" : "bg-slate-300",
+                      ].join(" ")}
+                    >
+                      <span
+                        className={[
+                          "absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform",
+                          b2bPricing ? "translate-x-6" : "translate-x-1",
+                        ].join(" ")}
                       />
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="Cost"
-                        value={newMaterialCost}
-                        onChange={(e) => setNewMaterialCost(e.target.value)}
-                        className="rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
-                      />
-                      <button
-                        onClick={addMaterial}
-                        className="rounded-2xl bg-slate-900 px-4 py-3 font-medium text-white transition hover:bg-slate-700"
-                      >
-                        Add
-                      </button>
-                    </div>
-                    <p className="mt-3 text-xs text-slate-500">
-                      The new material is added to the dropdown for {selectedPrinter.name} immediately.
-                    </p>
+                    </button>
                   </div>
                 </section>
 
                 <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-                  <h2 className="text-lg font-semibold">4. Generate Quote</h2>
+                  <h2 className="text-lg font-semibold">3. Material</h2>
+                  <p className="mt-1 text-sm text-slate-600">Materials available for {selectedPrinter.name}.</p>
+
+                  <label className="mt-4 block">
+                    <span className="mb-2 block text-sm font-medium text-slate-700">Material</span>
+                    <select
+                      value={materialName}
+                      onChange={(e) => setMaterialName(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base outline-none transition focus:border-slate-900"
+                    >
+                      {availableMaterials.map((material) => (
+                        <option key={material.name} value={material.name}>
+                          {material.name} ({money(material.cost)} per unit)
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </section>
+
+                <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                  <h2 className="text-lg font-semibold">
+                    {b2bPricing ? "4. Generate B2B Team Invoice" : "4. Generate Quote"}
+                  </h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    Fill in the recipient details and print quantity, then export a PDF quote with your logo.
+                    {b2bPricing
+                      ? "Fill in the B2B team number and print quantity, then export an internal invoice PDF with your logo."
+                      : "Fill in the recipient details and print quantity, then export a PDF quote with your logo."}
                   </p>
 
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">Recipient name</span>
-                      <input
-                        type="text"
-                        placeholder="Jane Doe"
-                        value={recipientName}
-                        onChange={(e) => setRecipientName(e.target.value)}
-                        className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
-                      />
-                    </label>
+                    {b2bPricing ? (
+                      <label className="block">
+                        <span className="mb-2 block text-sm font-medium text-slate-700">B2B Team Number</span>
+                        <input
+                          type="text"
+                          placeholder="B2B-1042"
+                          value={b2bTeamNumber}
+                          onChange={(e) => setB2bTeamNumber(e.target.value)}
+                          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
+                        />
+                      </label>
+                    ) : (
+                      <>
+                        <label className="block">
+                          <span className="mb-2 block text-sm font-medium text-slate-700">Recipient name</span>
+                          <input
+                            type="text"
+                            placeholder="Jane Doe"
+                            value={recipientName}
+                            onChange={(e) => setRecipientName(e.target.value)}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
+                          />
+                        </label>
 
-                    <label className="block">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">Department</span>
-                      <input
-                        type="text"
-                        placeholder="Orthopedics"
-                        value={recipientDepartment}
-                        onChange={(e) => setRecipientDepartment(e.target.value)}
-                        className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
-                      />
-                    </label>
+                        <label className="block">
+                          <span className="mb-2 block text-sm font-medium text-slate-700">Department</span>
+                          <input
+                            type="text"
+                            placeholder="Orthopedics"
+                            value={recipientDepartment}
+                            onChange={(e) => setRecipientDepartment(e.target.value)}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
+                          />
+                        </label>
+                      </>
+                    )}
 
                     <label className="block">
                       <span className="mb-2 block text-sm font-medium text-slate-700">Part name</span>
@@ -392,7 +349,7 @@
 
                   <div className="mt-5 flex items-center justify-between gap-4 rounded-2xl bg-slate-50 p-4">
                     <div className="text-sm text-slate-600">
-                      Quoted total for {quantity} print{quantity === 1 ? "" : "s"}
+                      {b2bPricing ? "Internal total" : "Quoted total"} for {quantity} print{quantity === 1 ? "" : "s"}
                       <div className="text-2xl font-semibold tracking-tight text-slate-900">{money(quoteTotal)}</div>
                     </div>
                     <button
@@ -405,12 +362,14 @@
                           : "cursor-not-allowed bg-slate-200 text-slate-400",
                       ].join(" ")}
                     >
-                      Download Quote PDF
+                      {b2bPricing ? "Generate B2B Team Invoice" : "Download Quote PDF"}
                     </button>
                   </div>
                   {!quoteReady && (
                     <p className="mt-3 text-xs text-slate-500">
-                      Recipient name, department, and part name are required to generate a quote.
+                      {b2bPricing
+                        ? "B2B Team Number and part name are required to generate an invoice."
+                        : "Recipient name, department, and part name are required to generate a quote."}
                     </p>
                   )}
                 </section>
@@ -425,13 +384,19 @@
                       <span>Printer</span>
                       <span className="font-medium text-slate-900">{selectedPrinter.name}</span>
                     </div>
+                    {b2bPricing && (
+                      <div className="mt-3 flex items-center justify-between text-sm text-emerald-600">
+                        <span>B2B pricing</span>
+                        <span className="font-medium">Active</span>
+                      </div>
+                    )}
                     <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
                       <span>Setup fee</span>
-                      <span className="font-medium text-slate-900">{includeSetup ? money(breakdown.setupComponent) : money(0)}</span>
+                      <span className="font-medium text-slate-900">{money(breakdown.setupComponent)}</span>
                     </div>
                     <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
                       <span>Time cost</span>
-                      <span className="font-medium text-slate-900">{includeTimeCost ? money(breakdown.timeComponent) : money(0)}</span>
+                      <span className="font-medium text-slate-900">{money(breakdown.timeComponent)}</span>
                     </div>
                     <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
                       <span>Material</span>
@@ -446,9 +411,9 @@
                   <div className="mt-5 rounded-2xl border border-slate-200 p-4 text-sm leading-6 text-slate-600">
                     <div className="font-medium text-slate-900">Calculation</div>
                     <div className="mt-2">
-                      ({includeTimeCost ? `${printTime || 0} hrs × ${money(selectedPrinter.timeCost)}/hr` : "time excluded"}) +
+                      ({printTime || 0} hrs × {money(selectedPrinter.timeCost)}/hr{b2bPricing ? " × 0.5" : ""}) +
                       {" "}
-                      ({includeSetup ? money(selectedPrinter.setupFee) : "$0.00"}) + {materialAmount || 0} × {money(selectedMaterial.cost)}
+                      {money(breakdown.setupComponent)} + {materialAmount || 0} × {money(selectedMaterial.cost)}
                     </div>
                   </div>
                 </section>
@@ -478,6 +443,9 @@
               </aside>
             </div>
           </div>
+          <footer className="mx-auto max-w-6xl px-4 pb-8 text-center text-xs text-slate-400 sm:px-6 lg:px-8">
+            © {new Date().getFullYear()} Kolja Klug. All rights reserved.
+          </footer>
         </div>
       );
     }
