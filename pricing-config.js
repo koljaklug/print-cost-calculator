@@ -2,15 +2,18 @@
 // Edit the values below to change printers, materials, or pricing tiers —
 // index.html reads these as globals, no other file needs to change.
 
+// type controls which process icon shows on the printer's selection card:
+// "fdm" (filament extrusion), "sla" (resin vat photopolymerization), or "sls" (powder bed fusion).
 const PRINTERS = [
-  { name: "Prusa", setupFee: 15, timeCost: 1, materials: ["PLA", "PETG", "TPU", "PVA"] },
+  { name: "Prusa", setupFee: 15, timeCost: 1, materials: ["PLA", "PETG", "TPU", "PVA"], type: "fdm" },
   {
     name: "Form 4",
     setupFee: 15,
     timeCost: 3,
     materials: ["BioMed White", "Clear", "Elastic 50A", "Flexible 80A", "Tough 2000", "Silicone 40A", "BioMed Durable"],
+    type: "sla",
   },
-  { name: "Fuse", setupFee: 20, timeCost: 3, materials: ["Nylon"] },
+  { name: "Fuse", setupFee: 20, timeCost: 3, materials: ["Nylon"], type: "sls" },
 ];
 
 const MATERIALS = [
