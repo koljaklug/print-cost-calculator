@@ -9,11 +9,13 @@ Repo: https://github.com/koljaklug/print-cost-calculator
 
 `index.html` is the entire application — no build step, no `npm install`, no bundler. React, ReactDOM, Babel Standalone, Tailwind CSS, and jsPDF are all loaded from CDNs (`unpkg.com` / `cdn.tailwindcss.com`) via `<script>` tags. The JSX app source lives in a `<script type="text/babel-source">` block; a small vanilla-JS snippet at the bottom transforms it with Babel (forcing the **classic** JSX runtime — see "Known quirks" below) and injects it as a real `<script>`.
 
+All pricing data (printers, materials, pricing tiers) lives in a separate `pricing-config.js`, loaded before the app script — see "Editing pricing data" below.
+
 This means the whole site can be opened from a single HTML file or hosted anywhere that serves static files — no server-side logic at all.
 
 ## How pricing works
 
-**Printers** (`initialPrinters` in the script) each have a setup fee, an hourly time cost, and a list of compatible materials:
+**Printers** (`PRINTERS` in `pricing-config.js`) each have a setup fee, an hourly time cost, and a list of compatible materials:
 
 | Printer | Setup fee | Time cost | Materials |
 |---|---|---|---|
@@ -21,24 +23,26 @@ This means the whole site can be opened from a single HTML file or hosted anywhe
 | Form 4 | $15 | $3/hr | BioMed White, Clear, Elastic 50A, Flexible 80A, Tough 2000, Silicone 40A, BioMed Durable |
 | Fuse | $20 | $3/hr | Nylon |
 
-**Materials** (`initialMaterials`) each have a cost per gram/ml, ranging from $0.12 (PLA/PETG/TPU) to $1.35 (BioMed Durable). The material dropdown is filtered to whatever the selected printer supports.
+**Materials** (`MATERIALS`) each have a cost per gram/ml, ranging from $0.12 (PLA/PETG/TPU) to $1.35 (BioMed Durable). The material dropdown is filtered to whatever the selected printer supports.
 
 **Base formula:**
 ```
-Total = Setup Fee + (Print Time × Printer Time Cost) + (Material Amount × Material Cost × Pricing Tier Multiplier)
+Total = (Setup Fee × Tier Setup Multiplier) + (Print Time × Printer Time Cost) + (Material Amount × Material Cost × Tier Material Multiplier)
 ```
+
+Time cost is always charged in full — only setup fee and material cost are affected by the pricing tier.
 
 ### Pricing tiers
 
-A 3-way segmented toggle ("Pricing tier") controls both the material cost multiplier and the page's background color:
+A 3-way segmented toggle ("Pricing tier") controls the setup fee multiplier, the material cost multiplier, and the page's background color — all defined per-tier in `PRICING_STAGES` in `pricing-config.js`:
 
-| Tier | Material multiplier | Setup fee | Time cost | Background |
-|---|---|---|---|---|
-| Internal | 1.2x | full | full | light blue (`bg-blue-50`) |
-| External | 3x | full | full | grey (`bg-slate-200`) |
-| B2B | 1.5x | **waived** | **halved** | light red (`bg-red-50`) |
+| Tier | Setup fee multiplier | Material multiplier | Background |
+|---|---|---|---|
+| Internal | 0.5x (half) | 1.5x | light blue (`bg-blue-100`) |
+| External | 1x (full) | 4x | grey (`bg-slate-200`) |
+| B2B | 0.5x (half) | 2x | light red (`bg-red-100`) |
 
-Only B2B gets the setup-fee waiver and time-cost discount; Internal and External always charge full setup fee and time cost, just with a different material markup.
+**The pricing tier's multiplier values are intentionally not displayed anywhere in the UI** — the toggle just shows tier names (Internal/External/B2B); the resulting dollar totals show in the Cost Summary and PDF, but the multiplier/markup numbers themselves stay out of the page and the exported PDF.
 
 ### Quantity pricing (quote/invoice total)
 
@@ -58,9 +62,15 @@ The "4. Generate ___" section changes shape depending on the active pricing tier
 | External | Generate Quote | Contact name, Department, Email address, Part name | "3D Print Quote" | `Quote_<part>.pdf` |
 | B2B | Generate B2B Team Invoice | B2B Team Number, Part name | "Bench to Bedside - Internal Print Invoice" | `Invoice_<part>.pdf` |
 
-All three PDF types show the CMI logo, date, the relevant fields, printer, material, and **only the final total** — no itemized setup/time/material cost breakdown (that breakdown is only shown on-screen in the "Cost summary" sidebar, never on the exported PDF).
+All three PDF types show the CMI logo, date, the relevant fields, printer, material, and **only the final total** — no itemized setup/time/material cost breakdown and no visible markup/multiplier (the Cost Summary sidebar shows the setup/time/material dollar breakdown on-screen, but never the tier's multiplier values or a calculation formula — neither appears on the page or the PDF).
+
+Fields have no example/placeholder text — they're intentionally blank until filled in.
 
 PDF generation uses jsPDF (`window.jspdf.jsPDF`), loaded from `unpkg.com/jspdf@2.5.2`.
+
+## Editing pricing data
+
+Printers, materials, and pricing tiers all live in `pricing-config.js`, loaded as a plain global-scope `<script>` before the app script runs. To change a setup fee, time cost, material cost, add/remove a material or printer, or adjust a tier's multipliers or color, edit `pricing-config.js` only — `index.html` doesn't need to change. The file is plain JS with comments explaining each field.
 
 ## Logo
 
@@ -90,7 +100,7 @@ Then open `http://localhost:8080`.
 Hosted via GitHub Pages from the `main` branch root. To publish changes:
 
 ```bash
-git add index.html
+git add index.html pricing-config.js
 git commit -m "..."
 git push
 ```
@@ -103,13 +113,15 @@ GitHub Pages rebuilds automatically (usually within 1–2 minutes) at https://ko
 
 - **Tailwind CDN production warning** in the browser console ("cdn.tailwindcss.com should not be used in production...") is expected and harmless — it's just Tailwind's Play CDN reminding you it's not meant for high-traffic production sites. Fine for this use case.
 - **Babel JSX runtime:** newer Babel Standalone builds default to the "automatic" JSX runtime, which emits an ES `import` statement that can't run in a plain (non-module) `<script>` tag. The build step at the bottom of `index.html` explicitly forces `runtime: "classic"` to avoid this — don't remove that option when editing.
-- The whole app is one file with no tests and no type checking. Verify changes by serving locally and clicking through the UI (or checking the browser console for errors) before pushing.
+- **Tailwind color classes must be real shades.** Tailwind's default palette only has specific steps per color (50, 100, 200, 300...) — there's no 150, 250, etc. A class like `bg-blue-150` compiles to nothing and silently renders no background at all. When picking a `bg` value in `pricing-config.js`, stick to real steps (50/100/200/...) or use an arbitrary-value class like `bg-[#dbeafe]` if you need an exact color Tailwind doesn't ship.
+- The whole app is one file (plus `pricing-config.js`) with no tests and no type checking. Verify changes by serving locally and clicking through the UI (or checking the browser console for errors) before pushing.
 
 ## File structure
 
 ```
 print-cost-calculator/
-├── index.html          # the entire app
+├── index.html          # the entire app (UI, PDF generation)
+├── pricing-config.js   # printers, materials, and pricing tier data — edit this to adjust pricing
 ├── assets/
 │   ├── logo.png         # original CMI logo (with transparency)
 │   └── logo_quote.jpg   # flattened/resized version embedded in the PDF
