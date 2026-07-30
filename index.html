@@ -199,7 +199,9 @@
                           ].join(" ")}
                         >
                           <div className="text-base font-semibold">{printer.name}</div>
-                          <img src={PROCESS_ICONS[printer.type]} alt={printer.type.toUpperCase()} className="h-20 w-20 shrink-0" />
+                          {PROCESS_ICONS[printer.type] && (
+                            <img src={PROCESS_ICONS[printer.type]} alt={printer.type} className="h-20 w-20 shrink-0" />
+                          )}
                         </button>
                       );
                     })}
