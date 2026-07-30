@@ -45,9 +45,9 @@
     ];
 
     const PRICING_STAGES = {
-      internal: { label: "Internal", materialMultiplier: 1.2, bg: "bg-blue-50", accent: "text-blue-600", swatch: "bg-blue-500" },
-      external: { label: "External", materialMultiplier: 3, bg: "bg-slate-200", accent: "text-slate-700", swatch: "bg-slate-500" },
-      b2b: { label: "B2B", materialMultiplier: 1.5, bg: "bg-red-50", accent: "text-red-600", swatch: "bg-red-500" },
+      internal: { label: "Internal", materialMultiplier: 1.2, bg: "bg-blue-50", swatch: "bg-blue-500" },
+      external: { label: "External", materialMultiplier: 3, bg: "bg-slate-200", swatch: "bg-slate-500" },
+      b2b: { label: "B2B", materialMultiplier: 1.5, bg: "bg-red-50", swatch: "bg-red-500" },
     };
 
     function money(value) {
@@ -266,14 +266,7 @@
                   </div>
 
                   <div className="mt-4 rounded-2xl border border-slate-200 p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-900">Pricing tier</span>
-                      <span className="text-xs text-slate-500">
-                        {pricingStage === "b2b"
-                          ? "No setup fee, half time cost, 1.5x material"
-                          : `${stageConfig.materialMultiplier}x material cost`}
-                      </span>
-                    </div>
+                    <span className="text-sm font-medium text-slate-900">Pricing tier</span>
                     <div className="mt-3 grid grid-cols-3 gap-1 rounded-full bg-slate-100 p-1">
                       {Object.entries(PRICING_STAGES).map(([key, cfg]) => {
                         const active = pricingStage === key;
@@ -308,7 +301,7 @@
                     >
                       {availableMaterials.map((material) => (
                         <option key={material.name} value={material.name}>
-                          {material.name} ({money(material.cost)} per unit)
+                          {material.name}
                         </option>
                       ))}
                     </select>
@@ -336,7 +329,6 @@
                         <span className="mb-2 block text-sm font-medium text-slate-700">Project</span>
                         <input
                           type="text"
-                          placeholder="Iris Ball Shutter"
                           value={project}
                           onChange={(e) => setProject(e.target.value)}
                           className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
@@ -350,7 +342,6 @@
                           <span className="mb-2 block text-sm font-medium text-slate-700">Contact name</span>
                           <input
                             type="text"
-                            placeholder="Jane Doe"
                             value={contactName}
                             onChange={(e) => setContactName(e.target.value)}
                             className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
@@ -361,7 +352,6 @@
                           <span className="mb-2 block text-sm font-medium text-slate-700">Department</span>
                           <input
                             type="text"
-                            placeholder="Orthopedics"
                             value={department}
                             onChange={(e) => setDepartment(e.target.value)}
                             className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
@@ -372,7 +362,6 @@
                           <span className="mb-2 block text-sm font-medium text-slate-700">Email address</span>
                           <input
                             type="email"
-                            placeholder="jane.doe@example.com"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
@@ -386,7 +375,6 @@
                         <span className="mb-2 block text-sm font-medium text-slate-700">B2B Team Number</span>
                         <input
                           type="text"
-                          placeholder="B2B-1042"
                           value={b2bTeamNumber}
                           onChange={(e) => setB2bTeamNumber(e.target.value)}
                           className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
@@ -398,7 +386,6 @@
                       <span className="mb-2 block text-sm font-medium text-slate-700">Part name</span>
                       <input
                         type="text"
-                        placeholder="Femur guide"
                         value={partName}
                         onChange={(e) => setPartName(e.target.value)}
                         className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-900"
@@ -460,13 +447,6 @@
                       <span>Printer</span>
                       <span className="font-medium text-slate-900">{selectedPrinter.name}</span>
                     </div>
-                    <div className={["mt-3 flex items-center justify-between text-sm font-medium", stageConfig.accent].join(" ")}>
-                      <span>Pricing tier</span>
-                      <span>
-                        {stageConfig.label} · {stageConfig.materialMultiplier}x material
-                        {pricingStage === "b2b" ? ", 0.5x time, no setup" : ""}
-                      </span>
-                    </div>
                     <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
                       <span>Setup fee</span>
                       <span className="font-medium text-slate-900">{money(breakdown.setupComponent)}</span>
@@ -482,15 +462,6 @@
                     <div className="mt-5 border-t border-slate-200 pt-4 flex items-end justify-between">
                       <span className="text-sm font-medium text-slate-600">Total</span>
                       <span className="text-3xl font-semibold tracking-tight">{money(total)}</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 rounded-2xl border border-slate-200 p-4 text-sm leading-6 text-slate-600">
-                    <div className="font-medium text-slate-900">Calculation</div>
-                    <div className="mt-2">
-                      ({printTime || 0} hrs × {money(selectedPrinter.timeCost)}/hr{pricingStage === "b2b" ? " × 0.5" : ""}) +
-                      {" "}
-                      {money(breakdown.setupComponent)} + {materialAmount || 0} × {money(selectedMaterial.cost)} × {stageConfig.materialMultiplier}
                     </div>
                   </div>
                 </section>
