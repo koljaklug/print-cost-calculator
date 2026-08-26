@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Speed Reader</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   :root {
     color-scheme: light;
@@ -151,10 +150,14 @@
     font-weight: 600;
     font-family: "Courier New", Courier, monospace;
   }
+  #wdPrefix, #wdPivot, #wdSuffix {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
   #wdPrefix {
     text-align: right;
     color: #fff;
-    white-space: pre;
+    white-space: pre-wrap;
   }
   #wdPivot {
     text-align: center;
@@ -164,7 +167,7 @@
   #wdSuffix {
     text-align: left;
     color: #fff;
-    white-space: pre;
+    white-space: pre-wrap;
   }
   #exitBtn {
     position: absolute;
@@ -219,9 +222,26 @@
   </div>
 
 <script>
-  if (window.pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const PDFJS_VERSION = '3.11.174';
+  let pdfjsLoadPromise = null;
+
+  // Loaded on demand, only when a PDF is actually selected — most sessions
+  // just paste text, so there's no reason to ship ~350KB of parser upfront.
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve();
+    if (pdfjsLoadPromise) return pdfjsLoadPromise;
+    pdfjsLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.js`;
+      script.onload = () => {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
+        resolve();
+      };
+      script.onerror = () => reject(new Error('Failed to load PDF support — check your connection.'));
+      document.head.appendChild(script);
+    });
+    return pdfjsLoadPromise;
   }
 
   const textInput   = document.getElementById('textInput');
@@ -236,6 +256,7 @@
   const setupEl   = document.getElementById('setup');
   const readerEl  = document.getElementById('reader');
   const exitBtn   = document.getElementById('exitBtn');
+  const wordDisplay = document.getElementById('wordDisplay');
   const wdPrefix  = document.getElementById('wdPrefix');
   const wdPivot   = document.getElementById('wdPivot');
   const wdSuffix  = document.getElementById('wdSuffix');
@@ -245,60 +266,86 @@
   let playing = false;
   let timer = null;
   let sessionWpm = 400;
+  let fileBusy = false;
 
-  function updateStats() {
+  // Restore the last speed the user picked, if any.
+  const savedWpm = Number(localStorage.getItem('speedReaderWpm'));
+  if (savedWpm >= 200 && savedWpm <= 800) {
+    wpmSlider.value = savedWpm;
+    wpmValue.textContent = savedWpm;
+  }
+
+  // Re-splitting the whole text is only needed when the text itself changes,
+  // not on every WPM slider tick — keeps large pasted documents smooth to drag.
+  function recomputeWords() {
     const raw = textInput.value.trim();
     words = raw ? raw.split(/\s+/).filter(Boolean) : [];
     wordCountEl.textContent = words.length;
-    const wpm = Number(wpmSlider.value);
-    const minutes = words.length / wpm;
-    const totalSeconds = Math.round(minutes * 60);
-    const m = Math.floor(totalSeconds / 60);
-    const s = totalSeconds % 60;
-    estTimeEl.textContent = `${m}:${String(s).padStart(2, '0')}`;
     startBtn.disabled = words.length === 0;
   }
 
-  textInput.addEventListener('input', updateStats);
+  function updateTimeEstimate() {
+    const wpm = Number(wpmSlider.value);
+    const totalSeconds = Math.round((words.length / wpm) * 60);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    estTimeEl.textContent = `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  textInput.addEventListener('input', () => {
+    recomputeWords();
+    updateTimeEstimate();
+  });
 
   wpmSlider.addEventListener('input', () => {
     wpmValue.textContent = wpmSlider.value;
-    updateStats();
+    updateTimeEstimate();
+    localStorage.setItem('speedReaderWpm', wpmSlider.value);
   });
 
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files[0];
-    if (!file) return;
+    if (!file || fileBusy) return;
+    fileBusy = true;
+    fileInput.disabled = true;
     fileStatus.textContent = 'Reading file…';
     try {
       let text = '';
       if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
         text = await extractPdfText(file);
+        if (!text.trim()) {
+          fileStatus.textContent = `"${file.name}" has no extractable text — it may be scanned images. Try pasting the text instead.`;
+          return;
+        }
       } else {
         text = await file.text();
       }
       textInput.value = text.trim();
       fileStatus.textContent = `Loaded "${file.name}"`;
-      updateStats();
+      recomputeWords();
+      updateTimeEstimate();
     } catch (err) {
       console.error(err);
-      fileStatus.textContent = 'Could not read that file.';
+      fileStatus.textContent = err.message || 'Could not read that file.';
+    } finally {
+      fileBusy = false;
+      fileInput.disabled = false;
+      fileInput.value = ''; // allow re-selecting the same file later
     }
   });
 
   async function extractPdfText(file) {
-    if (!window.pdfjsLib) {
-      throw new Error('PDF support failed to load (check your connection) — try pasting the text instead.');
-    }
+    await loadPdfJs();
     const buf = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-    let text = '';
+    const pageTexts = [];
     for (let i = 1; i <= pdf.numPages; i++) {
+      fileStatus.textContent = `Reading page ${i} of ${pdf.numPages}…`;
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      text += content.items.map(item => item.str).join(' ') + '\n\n';
+      pageTexts.push(content.items.map(item => item.str).join(' '));
     }
-    return text;
+    return pageTexts.join('\n\n');
   }
 
   // Optimal recognition point: pivot letter index based on word length.
@@ -316,15 +363,24 @@
     wdPrefix.textContent = word.slice(0, p);
     wdPivot.textContent = word.slice(p, p + 1);
     wdSuffix.textContent = word.slice(p + 1);
+    // Shrink very long words (compound words, URLs) so they never overflow
+    // the fixed-position word display.
+    wordDisplay.style.fontSize = word.length > 16
+      ? `clamp(18px, ${Math.max(3, 8 - (word.length - 16) * 0.3)}vw, 60px)`
+      : '';
   }
 
+  // Multipliers are centered on 1x for an "average" word so the session's
+  // real pace tracks the chosen WPM instead of drifting slower — longer
+  // words and sentence breaks cost a bit more, short words a bit less.
   function delayFor(word, baseMs) {
-    let delay = baseMs;
-    if (word.length > 8) delay += baseMs * 0.5;
-    else if (word.length > 5) delay += baseMs * 0.25;
-    if (/[.!?]$/.test(word)) delay += baseMs;
-    else if (/[,;:]$/.test(word)) delay += baseMs * 0.5;
-    return delay;
+    let factor = 1;
+    if (word.length > 10) factor += 0.35;
+    else if (word.length > 6) factor += 0.15;
+    else if (word.length <= 3) factor -= 0.15;
+    if (/[.!?]$/.test(word)) factor += 0.5;
+    else if (/[,;:]$/.test(word)) factor += 0.2;
+    return baseMs * factor;
   }
 
   function scheduleNext() {
@@ -402,7 +458,8 @@
     }
   });
 
-  updateStats();
+  recomputeWords();
+  updateTimeEstimate();
 </script>
 </body>
 </html>
