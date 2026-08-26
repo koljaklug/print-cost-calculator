@@ -101,6 +101,32 @@
   .stats strong {
     color: #1a1a1a;
   }
+  .voice-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #eee;
+  }
+  .voice-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #111;
+  }
+  .voice-row label {
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .voice-row.unsupported label {
+    color: #999;
+    cursor: not-allowed;
+  }
+  .voice-note {
+    font-size: 12px;
+    color: #999;
+    margin-left: auto;
+  }
   #startBtn {
     width: 100%;
     padding: 16px;
@@ -208,6 +234,10 @@
         <span><strong id="wordCount">0</strong> words</span>
         <span>~<strong id="estTime">0:00</strong> to read</span>
       </div>
+      <div class="voice-row" id="voiceRow">
+        <input type="checkbox" id="voiceToggle">
+        <label for="voiceToggle">🔊 Read aloud, synced to the word on screen</label>
+      </div>
     </div>
 
     <button id="startBtn" disabled>Start Reading</button>
@@ -252,6 +282,8 @@
   const wordCountEl = document.getElementById('wordCount');
   const estTimeEl   = document.getElementById('estTime');
   const startBtn    = document.getElementById('startBtn');
+  const voiceRow    = document.getElementById('voiceRow');
+  const voiceToggle = document.getElementById('voiceToggle');
 
   const setupEl   = document.getElementById('setup');
   const readerEl  = document.getElementById('reader');
@@ -267,12 +299,25 @@
   let timer = null;
   let sessionWpm = 400;
   let fileBusy = false;
+  let voiceEnabled = false;
 
   // Restore the last speed the user picked, if any.
   const savedWpm = Number(localStorage.getItem('speedReaderWpm'));
   if (savedWpm >= 200 && savedWpm <= 800) {
     wpmSlider.value = savedWpm;
     wpmValue.textContent = savedWpm;
+  }
+
+  const voiceSupported = 'speechSynthesis' in window;
+  if (!voiceSupported) {
+    voiceToggle.disabled = true;
+    voiceRow.classList.add('unsupported');
+    voiceRow.insertAdjacentHTML('beforeend', '<span class="voice-note">Not supported in this browser</span>');
+  } else {
+    voiceToggle.checked = localStorage.getItem('speedReaderVoice') === '1';
+    voiceToggle.addEventListener('change', () => {
+      localStorage.setItem('speedReaderVoice', voiceToggle.checked ? '1' : '0');
+    });
   }
 
   // Re-splitting the whole text is only needed when the text itself changes,
@@ -383,19 +428,55 @@
     return baseMs * factor;
   }
 
+  // Web Speech API's rate=1 is roughly a natural ~175 WPM in most engines;
+  // scale around that so the WPM slider maps onto a speech rate.
+  function wpmToRate(wpm) {
+    return Math.min(6, Math.max(0.5, wpm / 175));
+  }
+
+  function speakWord(word, onDone) {
+    speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(word);
+    utter.rate = wpmToRate(sessionWpm);
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(safety);
+      onDone();
+    };
+    utter.onend = finish;
+    utter.onerror = finish;
+    // Safety net: some browsers/OSes silently fail to speak (no voices
+    // installed, tab lost audio focus) without ever firing onend — don't
+    // let that stall the whole session.
+    const safety = setTimeout(finish, Math.max(4000, (60000 / sessionWpm) * 6));
+    speechSynthesis.speak(utter);
+  }
+
+  function advance() {
+    idx++;
+    if (idx >= words.length) {
+      exitReader();
+      return;
+    }
+    showWord(idx);
+    scheduleNext();
+  }
+
   function scheduleNext() {
     if (!playing) return;
-    const baseMs = 60000 / sessionWpm;
-    const delay = delayFor(words[idx], baseMs);
-    timer = setTimeout(() => {
-      idx++;
-      if (idx >= words.length) {
-        exitReader();
-        return;
-      }
-      showWord(idx);
-      scheduleNext();
-    }, delay);
+    if (voiceEnabled) {
+      // Voice drives the pace here: the next word only appears once its
+      // audio finishes, so what's on screen always matches what's spoken.
+      speakWord(words[idx], () => {
+        if (playing) advance();
+      });
+    } else {
+      const baseMs = 60000 / sessionWpm;
+      const delay = delayFor(words[idx], baseMs);
+      timer = setTimeout(advance, delay);
+    }
   }
 
   function play() {
@@ -407,6 +488,7 @@
   function pause() {
     playing = false;
     clearTimeout(timer);
+    if (voiceSupported) speechSynthesis.cancel();
   }
 
   function togglePlay() {
@@ -416,6 +498,7 @@
   function enterReader() {
     if (words.length === 0) return;
     sessionWpm = Number(wpmSlider.value);
+    voiceEnabled = voiceSupported && voiceToggle.checked;
     idx = 0;
     setupEl.hidden = true;
     readerEl.hidden = false;
@@ -451,10 +534,12 @@
       pause();
       idx = Math.min(idx + 1, words.length - 1);
       showWord(idx);
+      if (voiceEnabled) speakWord(words[idx], () => {});
     } else if (e.key === 'ArrowLeft') {
       pause();
       idx = Math.max(idx - 1, 0);
       showWord(idx);
+      if (voiceEnabled) speakWord(words[idx], () => {});
     }
   });
 
