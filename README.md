@@ -5,6 +5,8 @@ A single-file static website that estimates 3D print costs by printer and materi
 Live site: https://koljaklug.github.io/print-cost-calculator/
 Repo: https://github.com/koljaklug/print-cost-calculator
 
+This repo also hosts a small, unrelated bonus tool — a readrrr-style speed reader — at `reader.html` (see [Speed Reader](#speed-reader) below).
+
 ## What it is
 
 `index.html` is the entire application — no build step, no `npm install`, no bundler. React, ReactDOM, Babel Standalone, Tailwind CSS, and jsPDF are all loaded from CDNs (`unpkg.com` / `cdn.tailwindcss.com`) via `<script>` tags. The JSX app source lives in a `<script type="text/babel-source">` block; a small vanilla-JS snippet at the bottom transforms it with Babel (forcing the **classic** JSX runtime — see "Known quirks" below) and injects it as a real `<script>`.
@@ -122,8 +124,19 @@ GitHub Pages rebuilds automatically (usually within 1–2 minutes) at https://ko
 print-cost-calculator/
 ├── index.html          # the entire app (UI, PDF generation)
 ├── pricing-config.js   # printers, materials, and pricing tier data — edit this to adjust pricing
+├── reader.html          # standalone speed-reader tool, unrelated to the calculator above
 ├── assets/
 │   ├── logo.png         # original CMI logo (with transparency)
 │   └── logo_quote.jpg   # flattened/resized version embedded in the PDF
 └── README.md            # this file
 ```
+
+## Speed Reader
+
+`reader.html` is a self-contained RSVP (Rapid Serial Visual Presentation) speed reader, similar to the readrrr app: it flashes one word at a time so your eyes stay fixed and you don't scan the line.
+
+- **Setup screen:** paste text directly, or upload a `.txt` or `.pdf` file (PDF text is extracted client-side with [pdf.js](https://mozilla.github.io/pdf.js/), loaded from a CDN). A slider sets reading speed from 200–800 WPM, with a live word count and estimated reading time.
+- **Reading mode:** click "Start Reading" to go full-screen — plain black background, one word at a time in white, with the word's optimal recognition point (ORP) letter highlighted in red and horizontally fixed so your eyes don't move between words. The only visible control is an &times; in the corner to exit. Longer words and sentence-ending punctuation get slightly more display time.
+- **Keyboard/mouse shortcuts in reading mode** (no on-screen buttons, to keep the screen distraction-free): click the word or press Space to pause/resume, Left/Right arrows to step a word at a time, Escape (or the &times;) to exit.
+
+It's a separate, independent page from the cost calculator — open it directly at `reader.html` (or `https://koljaklug.github.io/print-cost-calculator/reader.html` once deployed).
